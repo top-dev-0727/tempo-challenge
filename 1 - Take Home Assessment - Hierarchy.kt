@@ -76,8 +76,28 @@ interface Hierarchy {
  * A node is present in the filtered hierarchy iff its node ID passes the predicate and all of its ancestors pass it as well.
  */
 fun Hierarchy.filter(nodeIdPredicate: (Int) -> Boolean): Hierarchy {
-  // todo implement
-  return ArrayBasedHierarchy(IntArray(0), IntArray(0))
+  val filteredNodeIds = mutableListOf<Int>()
+  val filteredDepths = mutableListOf<Int>()
+  
+  // Track which ancestors are included (by their depth)
+  val includedAncestors = mutableSetOf<Int>()
+  
+  for (index in 0 until size) {
+    val nodeId = nodeId(index)
+    val depth = depth(index)
+    
+    // Remove ancestors at depth >= current depth (they're no longer ancestors)
+    includedAncestors.removeAll { it >= depth }
+    
+    // Check if node passes predicate and has all ancestors included
+    if (nodeIdPredicate(nodeId) && (depth == 0 || includedAncestors.contains(depth - 1))) {
+      filteredNodeIds.add(nodeId)
+      filteredDepths.add(depth)
+      includedAncestors.add(depth)
+    }
+  }
+  
+  return ArrayBasedHierarchy(filteredNodeIds.toIntArray(), filteredDepths.toIntArray())
 }
 
 class ArrayBasedHierarchy(
@@ -101,6 +121,75 @@ class FilterTest {
     val filteredExpected: Hierarchy = ArrayBasedHierarchy(
       intArrayOf(1, 2, 5, 8, 10, 11),
       intArrayOf(0, 1, 1, 0, 1, 2))
+    assertEquals(filteredExpected.formatString(), filteredActual.formatString())
+  }
+
+  @Test
+  fun testFilterAllPass() {
+    val unfiltered: Hierarchy = ArrayBasedHierarchy(
+      intArrayOf(1, 2, 3),
+      intArrayOf(0, 1, 1))
+    val filteredActual: Hierarchy = unfiltered.filter { true }
+    assertEquals(unfiltered.formatString(), filteredActual.formatString())
+  }
+
+  @Test
+  fun testFilterNonePass() {
+    val unfiltered: Hierarchy = ArrayBasedHierarchy(
+      intArrayOf(1, 2, 3),
+      intArrayOf(0, 1, 1))
+    val filteredActual: Hierarchy = unfiltered.filter { false }
+    val filteredExpected: Hierarchy = ArrayBasedHierarchy(
+      intArrayOf(),
+      intArrayOf())
+    assertEquals(filteredExpected.formatString(), filteredActual.formatString())
+  }
+
+  @Test
+  fun testFilterRootFails() {
+    val unfiltered: Hierarchy = ArrayBasedHierarchy(
+      intArrayOf(1, 2, 3, 4, 5),
+      intArrayOf(0, 1, 2, 1, 0))
+    val filteredActual: Hierarchy = unfiltered.filter { nodeId -> nodeId != 1 }
+    // Node 1 fails, so all its descendants should be excluded
+    val filteredExpected: Hierarchy = ArrayBasedHierarchy(
+      intArrayOf(5),
+      intArrayOf(0))
+    assertEquals(filteredExpected.formatString(), filteredActual.formatString())
+  }
+
+  @Test
+  fun testFilterParentFails() {
+    val unfiltered: Hierarchy = ArrayBasedHierarchy(
+      intArrayOf(1, 2, 3, 4),
+      intArrayOf(0, 1, 2, 1))
+    val filteredActual: Hierarchy = unfiltered.filter { nodeId -> nodeId != 2 }
+    // Node 2 fails, so all its descendants (3) should be excluded, but 4 (sibling of 3) should pass
+    val filteredExpected: Hierarchy = ArrayBasedHierarchy(
+      intArrayOf(1, 4),
+      intArrayOf(0, 1))
+    assertEquals(filteredExpected.formatString(), filteredActual.formatString())
+  }
+
+  @Test
+  fun testFilterSingleNode() {
+    val unfiltered: Hierarchy = ArrayBasedHierarchy(
+      intArrayOf(42),
+      intArrayOf(0))
+    val filteredActual: Hierarchy = unfiltered.filter { nodeId -> nodeId == 42 }
+    assertEquals(unfiltered.formatString(), filteredActual.formatString())
+  }
+
+  @Test
+  fun testFilterDeepHierarchy() {
+    val unfiltered: Hierarchy = ArrayBasedHierarchy(
+      intArrayOf(1, 2, 3, 4, 5),
+      intArrayOf(0, 1, 2, 3, 4))
+    // Linear chain: 1 -> 2 -> 3 -> 4 -> 5
+    val filteredActual: Hierarchy = unfiltered.filter { nodeId -> nodeId % 2 == 1 } // Keep odd numbers
+    val filteredExpected: Hierarchy = ArrayBasedHierarchy(
+      intArrayOf(1, 3, 5),
+      intArrayOf(0, 2, 4))
     assertEquals(filteredExpected.formatString(), filteredActual.formatString())
   }
 }
